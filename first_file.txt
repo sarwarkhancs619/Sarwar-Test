@@ -1,1 +1,6 @@
+<<<<<<< HEAD
 My first ever file i created
+=======
+My first ever file
+I have made few changes today in this file
+>>>>>>> a5fd6b93aba343e72315a929a16723e35a781974
