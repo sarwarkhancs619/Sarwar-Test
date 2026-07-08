@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test API</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+    button { background: #0066cc; color: white; border: none; padding: 10px 20px; font-size: 1rem; cursor: pointer; border-radius: 4px; margin-right: 10px; }
+    button:hover { background: #004c99; }
+.button-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 1rem; }
+    .status-badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 0.85rem; font-weight: bold; margin-left: 10px; }
+    .status-pending { background: #ffcc00; color: #333; }
+
+    .status-success { background: #4caf50; color: white; }
+    .status-error { background: #f44336; color: white; }
+    pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; border: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <h1>Test Products API</h1>
+  <div class="button-bar">
+    <button id="getProductsBtn">GET Products</button>
+<button id="createProductBtn">Create Product</button>
+<button id="submitEmptyNameBtn">Submit Empty Name</button>
+<button id="forceCrashBtn">Force a Crash</button>
+
+        
+        <span id="statusBadge" class="status-badge" style="display: none;">Ready</span>
+
+
+  </div>
+  <h2>JSON Response:</h2>
+  <pre id="jsonOutput">Click the button to fetch products...</pre>
+  <script>
+    const badge = document.getElementById('statusBadge');
+    const output = document.getElementById('jsonOutput');
+
+    // GET Products
+    document.getElementById('getProductsBtn').addEventListener('click', async () => {
+      badge.style.display = 'inline-block';
+      badge.className = 'status-badge status-pending';
+      badge.textContent = 'Fetching...';
+      output.textContent = 'Loading...';
+      try {
+        const response = await fetch('/api/products');
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        badge.className = 'status-badge status-success';
+        badge.textContent = `Success (${response.status})`;
+        output.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        badge.className = 'status-badge status-error';
+        badge.textContent = 'Error';
+        output.textContent = error.message;
+      }
+    });
+
+    // Create Product
+    document.getElementById('createProductBtn').addEventListener('click', async () => {
+      badge.style.display = 'inline-block';
+      badge.className = 'status-badge status-pending';
+      badge.textContent = 'Creating...';
+      output.textContent = 'Sending request...';
+      try {
+        const response = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'My Product', price: 9.99 })
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        badge.className = 'status-badge status-success';
+        badge.textContent = `Created (${response.status})`;
+        output.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        badge.className = 'status-badge status-error';
+        badge.textContent = 'Error';
+        output.textContent = error.message;
+      }
+    });
+    // Submit Empty Name (no name field)
+    document.getElementById('submitEmptyNameBtn').addEventListener('click', async () => {
+      badge.style.display = 'inline-block';
+      badge.className = 'status-badge status-pending';
+      badge.textContent = 'Submitting empty name...';
+      output.textContent = 'Sending request...';
+      try {
+        const response = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ price: 9.99 })
+        });
+        const status = response.status;
+        const statusText = response.statusText;
+        const requestInfo = `Sent:   POST /api/products\nBody:   { "price": 9.99 } (no name field)`;
+        if (!response.ok) {
+          // Show orange badge for bad request
+          badge.className = 'status-badge status-pending';
+          badge.textContent = `${status} ${statusText}`;
+          output.textContent = `${requestInfo}\nGot:   ${status} ${statusText} ✗`;
+          return;
+        }
+        const data = await response.json();
+        badge.className = 'status-badge status-success';
+        badge.textContent = `Response (${status})`;
+        output.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        badge.className = 'status-badge status-error';
+        badge.textContent = 'Error';
+        output.textContent = error.message;
+      }
+    });
+    // Force a Crash (GET with crash param)
+    document.getElementById('forceCrashBtn').addEventListener('click', async () => {
+      badge.style.display = 'inline-block';
+      badge.className = 'status-badge status-pending';
+      badge.textContent = 'Crashing...';
+      output.textContent = 'Sending request...';
+      try {
+        const response = await fetch('/api/products?crash=true');
+        const status = response.status;
+        const statusText = response.statusText;
+        const requestInfo = `Sent:   GET /api/products?crash=true`;
+        if (!response.ok) {
+          // Show orange badge for error
+          badge.className = 'status-badge status-pending';
+          badge.textContent = `${status} ${statusText}`;
+          output.textContent = `${requestInfo}\nGot:   ${status} ${statusText} ✗`;
+          return;
+        }
+        const data = await response.json();
+        badge.className = 'status-badge status-success';
+        badge.textContent = `Response (${status})`;
+        output.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        badge.className = 'status-badge status-error';
+        badge.textContent = 'Error';
+        output.textContent = error.message;
+      }
+    });
+    
+  </script>
+</body>
+</html>

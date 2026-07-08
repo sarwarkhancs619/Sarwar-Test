@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple AI Transcription</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+    .box { border: 2px dashed #ccc; padding: 2rem; text-align: center; border-radius: 8px; margin-bottom: 1rem; }
+    button { background: #0066cc; color: white; border: none; padding: 10px 20px; font-size: 1rem; cursor: pointer; border-radius: 4px; }
+    button:hover { background: #004c99; }
+    select, input[type="file"] { margin-bottom: 1rem; padding: 5px; font-size: 1rem; }
+    #result { margin-top: 2rem; padding: 1rem; background: #f9f9f9; border: 1px solid #ddd; min-height: 100px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+  <h1>Simple AI Transcription & Translation</h1>
+  <p>Upload an audio file and let Gemini translate and transcribe it for you!</p>
+
+  <div class="box">
+    <form id="uploadForm">
+      <div>
+        <label for="audioFile"><strong>Select Audio File:</strong></label><br><br>
+        <input type="file" id="audioFile" name="audio" accept="audio/*" required>
+      </div>
+      
+      <div>
+        <label for="targetLang"><strong>Target Language:</strong></label><br><br>
+        <select id="targetLang" name="targetLang">
+          <option value="English">English</option>
+          <option value="Spanish">Spanish</option>
+          <option value="French">French</option>
+          <option value="German">German</option>
+          <option value="Japanese">Japanese</option>
+        </select>
+      </div>
+      <br>
+      <button type="submit" id="submitBtn">Transcribe Audio</button>
+    </form>
+  </div>
+
+  <h2>Result:</h2>
+  <div id="result">The transcription will appear here...</div>
+
+  <script>
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); // Stop the page from reloading
+      
+      const form = e.target;
+      const formData = new FormData(form);
+      const resultDiv = document.getElementById('result');
+      const submitBtn = document.getElementById('submitBtn');
+
+      resultDiv.innerHTML = "<em>Uploading and thinking... Please wait...</em>";
+      submitBtn.disabled = true;
+
+      try {
+        // Send the file to our backend
+        const response = await fetch('/api/transcribe', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('Something went wrong on the server.');
+        }
+
+        const text = await response.text();
+        resultDiv.innerHTML = text; // Show the HTML response
+      } catch (err) {
+        resultDiv.innerHTML = `<span style="color:red">Error: ${err.message}</span>`;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+
+</body>
+</html>
