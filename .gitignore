@@ -1,6 +1,5 @@
-# Ignore environment variable files
+# Ignore the real secrets file — never commit this
 .env
-.env.example
 # Node modules
 node_modules/
 # Uploads directory

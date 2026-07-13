@@ -13,6 +13,8 @@ const port = process.env.PORT || 3000;
 
 // Set up Google Gemini API
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 // Ensure we have an 'uploads' folder to save files
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -35,57 +37,49 @@ app.get('/test-api', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'test-api.html'));
 });
 
-// Mock Products API endpoint
-app.get('/api/products', (req, res) => {
+// GET all products from Supabase
+app.get('/api/products', async (req, res) => {
   try {
-    if (req.query.crash === 'true') {
-      // Deliberately throw an error to test crash handling
-      throw new Error('Deliberate crash');
+    const { data, error } = await supabase.from('products').select('*');
+    if (error) {
+      console.error('Supabase error fetching products:', error);
+      return res.status(500).json({ error: 'Failed to fetch products' });
     }
-    const transcriptionProducts = [
-      {
-        id: "prod_1",
-        name: "Basic Transcription",
-        description: "Standard AI transcription for clear audio. Ideal for simple conversations.",
-        price: 0.00,
-        features: ["Up to 30 minutes per month", "Standard accuracy", "Email support"]
-      },
-      {
-        id: "prod_2",
-        name: "Pro Transcription & Translation",
-        description: "Advanced Gemini-powered transcription with multi-language translation and rich HTML formatting.",
-        price: 15.00,
-        features: ["Unlimited minutes", "High accuracy", "Instant translation", "Priority support"]
-      },
-      {
-        id: "prod_3",
-        name: "Enterprise Audio Intelligence",
-        description: "Bulk processing, custom vocabulary, and API access for your entire organization.",
-        price: 99.00,
-        features: ["API Access", "Custom vocabulary", "Dedicated account manager", "SLA guarantee"]
-      }
-    ];
-    res.status(200).json(transcriptionProducts);
+    res.status(200).json(data);
   } catch (err) {
     console.error('Error in GET /api/products:', err);
-    // Return generic error message
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // POST handler for creating a product
-app.post('/api/products', (req, res) => {
-  const { name, price } = req.body;
-  // Validate name presence
+app.post('/api/products', async (req, res) => {
+  const { name, description, price, features } = req.body;
+  // Validate required fields
   if (!name || typeof name !== 'string' || name.trim() === '') {
     return res.status(400).json({ error: 'Name is required' });
   }
-  // Validate price is a positive number
   if (typeof price !== 'number' || price <= 0) {
     return res.status(400).json({ error: 'Price must be a positive number' });
   }
-  const created = { name, price };
-  return res.status(201).json(created);
+  // description is optional, default to empty string
+  const desc = typeof description === 'string' ? description : '';
+  // features should be an array of strings; default to empty array
+  const feats = Array.isArray(features) ? features : [];
+
+  const { data, error } = await supabase.from('products').insert({
+    name,
+    description: desc,
+    price,
+    features: feats,
+  }).select();
+
+  if (error) {
+    console.error('Supabase insert error:', error);
+    return res.status(500).json({ error: 'Failed to create product' });
+  }
+  // Return the newly created row
+  return res.status(201).json(data[0]);
 });
 
 // This is the endpoint that receives the audio file and sends it to Gemini
