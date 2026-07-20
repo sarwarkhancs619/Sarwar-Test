@@ -1,80 +1,1278 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Simple AI Transcription</title>
+  <title>VoxAI - Transcription & Translation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <!-- Quill Rich Text Editor -->
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+  <!-- html2pdf -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 2rem; max-width: 600px; margin: 0 auto; line-height: 1.6; }
-    .box { border: 2px dashed #ccc; padding: 2rem; text-align: center; border-radius: 8px; margin-bottom: 1rem; }
-    button { background: #0066cc; color: white; border: none; padding: 10px 20px; font-size: 1rem; cursor: pointer; border-radius: 4px; }
-    button:hover { background: #004c99; }
-    select, input[type="file"] { margin-bottom: 1rem; padding: 5px; font-size: 1rem; }
-    #result { margin-top: 2rem; padding: 1rem; background: #f9f9f9; border: 1px solid #ddd; min-height: 100px; border-radius: 4px; }
+    :root {
+      --bg-color: #0f172a;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #f97316 100%);
+      --glass-bg: rgba(255, 255, 255, 0.05);
+      --glass-border: rgba(255, 255, 255, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Navbar */
+    .navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background: var(--glass-bg);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--glass-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .search-container {
+      display: flex;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--glass-border);
+      border-radius: 9999px;
+      padding: 0.25rem 1rem;
+      width: 300px;
+      transition: all 0.3s ease;
+    }
+
+    .search-container:focus-within {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+    }
+
+    .search-container input {
+      background: transparent;
+      border: none;
+      color: white;
+      padding: 0.5rem;
+      outline: none;
+      width: 100%;
+    }
+
+    .auth-buttons {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .btn {
+      padding: 0.5rem 1.25rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 0.9rem;
+      border: none;
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text-main);
+      border: 1px solid var(--glass-border);
+    }
+
+    .btn-outline:hover {
+      background: var(--glass-bg);
+    }
+
+    .btn-primary {
+      background: var(--accent-gradient);
+      color: white;
+      box-shadow: 0 4px 15px rgba(249, 115, 22, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+    }
+
+    /* Main Content */
+    .container {
+      max-width: 800px;
+      margin: 3rem auto;
+      padding: 0 1rem;
+      width: 100%;
+    }
+
+    .header-text {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .header-text h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .glass-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      margin-bottom: 2rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .custom-file-upload {
+      border: 2px dashed var(--glass-border);
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: block;
+    }
+
+    .custom-file-upload:hover {
+      border-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    select,
+    input[type="file"] {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--glass-border);
+      color: white;
+      outline: none;
+    }
+
+    select:focus {
+      border-color: #f97316;
+    }
+
+    select option {
+      background-color: var(--bg-color);
+      color: white;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 1rem;
+      font-size: 1.1rem;
+      margin-top: 1rem;
+    }
+
+    #result {
+      min-height: 120px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1.5rem;
+      border: 1px solid var(--glass-border);
+      line-height: 1.8;
+    }
+
+    /* Products */
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .product-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+    }
+
+    .product-card:hover {
+      transform: translateY(-5px);
+      border-color: #3b82f6;
+    }
+
+    .product-price {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 1rem 0;
+    }
+
+    /* Auth Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(5px);
+    }
+
+    .modal-content {
+      background-color: var(--bg-color);
+      margin: 10% auto;
+      padding: 20px;
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      width: 400px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .close:hover {
+      color: white;
+    }
+
+    .modal input[type="email"],
+    .modal input[type="password"],
+    .modal input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--glass-border);
+      color: white;
+      outline: none;
+    }
+
+    .modal input:focus {
+      border-color: #3b82f6;
+    }
+
+    /* Password toggle wrapper */
+    .password-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .password-wrapper input {
+      padding-right: 42px !important;
+      margin-bottom: 0;
+    }
+    .toggle-pwd-btn {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 18px;
+      padding: 0;
+      line-height: 1;
+    }
+    .toggle-pwd-btn:hover { color: #f8fafc; }
+
+    /* Result boxes */
+    .result-section { margin-top: 14px; }
+    .result-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .result-box {
+      position: relative;
+      padding: 12px 44px 12px 12px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      overflow-y: auto;
+      max-height: 200px;
+      min-height: 60px;
+      line-height: 1.7;
+      font-size: 0.95rem;
+      color: var(--text-main);
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 5px;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+    }
+    .copy-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.08); }
+
+    /* Download row */
+    .download-section {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .download-section select {
+      flex: 1;
+      min-width: 190px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.9rem;
+    }
+
+    .download-section .btn {
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--glass-border);
+      padding-bottom: 0.5rem;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      transition: all 0.3s;
+    }
+    .tab-btn.active {
+      color: var(--text-main);
+      border-bottom: 2px solid #3b82f6;
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* Account Stats */
+    .stat-card {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--glass-border);
+      padding: 1.5rem;
+      border-radius: 12px;
+      margin-bottom: 1rem;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 12px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent-gradient);
+      width: 0%;
+      transition: width 0.5s;
+    }
+
+    /* History Table */
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    .history-table th, .history-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .history-table th { color: var(--text-muted); }
+  </style>
+
+  <!-- Font families for Quill -->
+  <style>
+    .ql-font-arial {
+      font-family: Arial, sans-serif;
+    }
+
+    .ql-font-calibri {
+      font-family: Calibri, sans-serif;
+    }
+
+    .ql-font-times-new-roman {
+      font-family: "Times New Roman", serif;
+    }
   </style>
 </head>
+
 <body>
 
-  <h1>Simple AI Transcription & Translation</h1>
-  <p>Upload an audio file and let Gemini translate and transcribe it for you!</p>
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <div class="brand">VoxAI</div>
 
-  <div class="box">
-    <form id="uploadForm">
-      <div>
-        <label for="audioFile"><strong>Select Audio File:</strong></label><br><br>
-        <input type="file" id="audioFile" name="audio" accept="audio/*" required>
+    <div class="search-container" style="position: relative;">
+      <form id="searchForm" style="width:100%; display:flex;">
+        <input type="text" name="q" placeholder="Search..." id="searchInput" autocomplete="off">
+      </form>
+      <div id="searchResults" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-color); border: 1px solid var(--glass-border); border-radius: 8px; margin-top: 0.5rem; max-height: 300px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); padding: 0.5rem;">
       </div>
-      
-      <div>
-        <label for="targetLang"><strong>Target Language:</strong></label><br><br>
-        <select id="targetLang" name="targetLang">
-          <option value="English">English</option>
-          <option value="Spanish">Spanish</option>
-          <option value="French">French</option>
-          <option value="German">German</option>
-          <option value="Japanese">Japanese</option>
-        </select>
+    </div>
+
+    <div class="auth-buttons" id="authButtons">
+      <button class="btn btn-outline" onclick="handleAuth('signin')">Sign In</button>
+      <button class="btn btn-primary" onclick="handleAuth('signup')">Sign Up</button>
+    </div>
+    <div class="auth-buttons" id="userButtons" style="display: none;">
+      <button class="btn btn-outline" onclick="switchTab('account')">Edit Profile</button>
+      <button class="btn btn-primary" onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="header-text">
+      <h1>Intelligent Audio Transcription</h1>
+      <p style="color: var(--text-muted);">Powered by Gemini. Upload an audio file to seamlessly translate and
+        transcribe.</p>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="document.getElementById('authModal').style.display='none'">&times;</span>
+        <div id="authHeader" class="modal-header">Sign In</div>
+        
+        <form id="authForm">
+          <div id="paymentSuccessMessage" style="display:none; color: #10b981; background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; border-radius: 6px; padding: 10px; margin-bottom: 15px; text-align: center; font-weight: 600;">Payment completed! Please complete your registration.</div>
+          <input type="email" id="authEmail" placeholder="Email Address" required>
+          
+          <div id="signupFields" style="display:none;">
+            <input type="text" id="authName" placeholder="Full Name">
+            <select id="authGender" style="width:100%; padding:10px; margin:10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:white;">
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+            <input type="date" id="authDob" style="width:100%; padding:10px; margin: 10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:white;">
+            <select id="authPlan" onchange="togglePaymentFields()" style="width:100%; padding:10px; margin:10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:white;">
+              <option value="basic">Basic Plan (5m/day)</option>
+              <option value="pro">Pro Plan (30m/day)</option>
+              <option value="enterprise">Enterprise Plan (60m/day)</option>
+            </select>
+            
+            <div id="safepayPaymentSection" style="display:none; padding:10px; margin: 10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); text-align:center;">
+              <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 0.85rem;">Payment Details (Safepay)</label>
+              <div style="padding: 15px; background: rgba(0,0,0,0.3); border-radius: 6px; border: 1px dashed var(--glass-border);">
+                <p style="font-size: 0.9rem; color: #3b82f6; margin-bottom: 10px;">🔒 Complete your payment securely below.</p>
+                <!-- Container for dynamic Safepay button -->
+                <div id="safepay-button-container"></div>
+                <button type="button" id="safepayCheckoutBtn" class="btn btn-primary" style="font-size:0.8rem;" onclick="handleSafepayCheckout()">Initialize Safepay</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="password-wrapper">
+            <input type="password" id="authPassword" placeholder="Password" required>
+            <button type="button" class="toggle-pwd-btn" id="togglePassword" title="Show/Hide Password">&#128065;</button>
+          </div>
+          <div style="display: flex; align-items: center; margin-top: 10px; margin-bottom: 5px;" id="keepMeLoggedInGroup">
+            <input type="checkbox" id="keepMeLoggedIn" style="margin-right: 8px; width: auto;">
+            <label for="keepMeLoggedIn" style="font-size: 0.85rem; color: var(--text-muted); cursor: pointer; margin-bottom: 0; display: inline-block;">Keep me logged in</label>
+          </div>
+          <button type="submit" id="authSubmitBtn" class="btn btn-primary" style="width:100%; margin-top: 10px; padding: 10px;">Submit</button>
+        </form>
+        <div style="text-align:center; margin-top: 15px;">
+          <a href="#" id="authToggle" style="color:#3b82f6; text-decoration:none;">Need an account? Sign Up</a>
+        </div>
       </div>
-      <br>
-      <button type="submit" id="submitBtn">Transcribe Audio</button>
-    </form>
+    </div>
+
+    <div id="loginMessage"
+      style="text-align: center; margin: 3rem 0; padding: 2rem; border: 1px dashed var(--glass-border); border-radius: 12px;">
+      <h3>Please sign in or create an account to use the transcription tool.</h3>
+      <button class="btn btn-primary" style="margin-top: 15px;" onclick="handleAuth('signin')">Sign In Now</button>
+    </div>
+
+    <div id="appContent" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <span id="welcomeMsg" style="color: var(--text-main); font-weight: 600;">Welcome</span>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('transcribe')">Transcribe</button>
+        <button class="tab-btn" onclick="switchTab('history')">History</button>
+        <button class="tab-btn" onclick="switchTab('account')">Account</button>
+      </div>
+
+      <div id="tab-transcribe" class="tab-pane active">
+        <div class="glass-card">
+          <form id="uploadForm">
+            <div class="form-group">
+              <label>Upload or Record Audio</label>
+              
+              <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                <button type="button" class="btn btn-outline" id="recordBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  <span id="recordIcon">🎤</span> <span id="recordText">Record Audio</span>
+                </button>
+                <span id="recordStatus" style="font-size: 0.85rem; color: #ef4444; display: none; font-weight: bold;">Recording...</span>
+              </div>
+
+              <label for="audioFile" class="custom-file-upload">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px; color:#94a3b8;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <br>
+              <span id="fileNameDisplay">Click to browse or drag and drop</span>
+            </label>
+            <input type="file" id="audioFile" name="audio" accept="audio/*"
+              onchange="handleFileChange(this)">
+          </div>
+
+          
+          <div class="form-group">
+            <label>Mode</label>
+            <div style="display:flex; gap:15px; margin-top:5px;">
+              <label><input type="radio" name="mode" value="transcribe" onchange="toggleLang(this.value)"> Transcribe Only</label>
+              <label><input type="radio" name="mode" value="translate" onchange="toggleLang(this.value)"> Translate Only</label>
+              <label><input type="radio" name="mode" value="both" checked onchange="toggleLang(this.value)"> Both</label>
+            </div>
+          </div>
+
+          <div class="form-group" id="langGroup">
+            <label for="targetLang">Target Language</label>
+
+            <select id="targetLang" name="targetLang">
+              <option value="English">English</option>
+              <option value="Spanish">Spanish</option>
+              <option value="French">French</option>
+              <option value="German">German</option>
+              <option value="Japanese">Japanese</option>
+            </select>
+          </div>
+
+          <button type="submit" id="submitBtn" class="btn btn-primary submit-btn">Transcribe Audio</button>
+          <div id="loadingMsg" style="color: #3b82f6; display: none; text-align: center; margin-top: 15px;">
+            <em>Uploading and analyzing audio... Please wait...</em></div>
+        </form>
+      </div>
+
+      <div class="glass-card" id="resultCard" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <h3 style="font-size:1.1rem; color:var(--text-muted); margin:0;">Results</h3>
+          <div>
+            <button type="button" class="btn btn-outline" style="padding:0.25rem 0.75rem; font-size:0.8rem;" onclick="changeFontSize(false)">A-</button>
+            <button type="button" class="btn btn-outline" style="padding:0.25rem 0.75rem; font-size:0.8rem;" onclick="changeFontSize(true)">A+</button>
+          </div>
+        </div>
+
+        <div style="margin-top:10px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 8px;" id="editor-container"></div>
+        <div class="download-section" style="margin-top: 15px; justify-content: flex-end;">
+          <button type="button" class="btn btn-outline" id="copyAllText" onclick="copyEditorText()">&#128203; Copy</button>
+          <button type="button" class="btn btn-outline" id="downloadPdf">&#128462; Download PDF</button>
+          <button type="button" class="btn btn-outline" id="downloadDocx">&#128196; Download DOCX</button>
+        </div>
+      </div>
+      </div>
+
+      <div id="tab-history" class="tab-pane">
+        <div class="glass-card">
+          <h3 style="margin-bottom:1rem;">Your History</h3>
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Mode</th>
+                <th>Duration (sec)</th>
+              </tr>
+            </thead>
+            <tbody id="historyTbody">
+              <tr><td colspan="3">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tab-account" class="tab-pane">
+        <div class="glass-card">
+          <h3 style="margin-bottom:1rem;">Account Details</h3>
+          <div id="profileDetails" style="margin-bottom:2rem; line-height: 1.8;">
+            Loading...
+          </div>
+          
+          <h3 style="margin-bottom:1rem;">Usage</h3>
+          <div class="stat-card">
+            <div style="display:flex; justify-content:space-between;">
+              <span>Daily Usage</span>
+              <span id="dailyUsageText">0 / 0 mins</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="dailyUsageFill"></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div style="display:flex; justify-content:space-between;">
+              <span>Weekly Usage</span>
+              <span id="weeklyUsageText">0 / 0 mins</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="weeklyUsageFill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 4rem;">
+      <h2 style="text-align: center; margin-bottom: 1rem;">Available Plans</h2>
+      <div id="productsList" class="products-grid">
+        <span style="color: var(--text-muted); text-align:center; display:block; width:100%;">Loading plans...</span>
+      </div>
+    </div>
   </div>
 
-  <h2>Result:</h2>
-  <div id="result">The transcription will appear here...</div>
-
+  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Safepay JS SDK -->
+  <script src="https://storage.googleapis.com/safepayobjects/api/safepay-checkout.min.js"></script>
   <script>
-    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-      e.preventDefault(); // Stop the page from reloading
-      
-      const form = e.target;
-      const formData = new FormData(form);
-      const resultDiv = document.getElementById('result');
-      const submitBtn = document.getElementById('submitBtn');
+    // Initialize Quill with extra font and size options
+    var Font = Quill.import('formats/font');
+    Font.whitelist = ['arial', 'calibri', 'times-new-roman', 'sans-serif']; // add desired fonts
+    Quill.register(Font, true);
+    var Size = Quill.import('attributors/style/size');
+    Size.whitelist = ['12px', '14px', '16px', '18px', '20px', '24px'];
+    Quill.register(Size, true);
 
-      resultDiv.innerHTML = "<em>Uploading and thinking... Please wait...</em>";
-      submitBtn.disabled = true;
+    var quill = new Quill('#editor-container', {
+      theme: 'snow',
+      modules: {
+        toolbar: [
+          [{ 'font': Font.whitelist }],
+          [{ 'size': Size.whitelist }],
+          [{ 'header': [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+          ['clean']
+        ]
+      },
+      placeholder: 'Your transcription will appear here...'
+    });
+
+    // Handle Font Size
+    let currentFontSize = 14;
+    function changeFontSize(increase) {
+      currentFontSize += increase ? 2 : -2;
+      document.querySelector('.ql-editor').style.fontSize = currentFontSize + 'px';
+    }
+
+    
+    // --- Added Logic ---
+    function toggleLang(mode) {
+      document.getElementById('langGroup').style.display = (mode === 'transcribe') ? 'none' : 'block';
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+      document.querySelector(`button[onclick="switchTab('${tabId}')"]`).classList.add('active');
+      document.getElementById(`tab-${tabId}`).classList.add('active');
+      
+      if (tabId === 'history') loadHistory();
+      if (tabId === 'account') loadProfile();
+    }
+
+    async function loadHistory() {
+      if (!currentUser) return;
+      try {
+        const res = await fetch(`/api/activity?userId=${currentUser.id}`);
+        const data = await res.json();
+        const tbody = document.getElementById('historyTbody');
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3">No activity yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.map(log => `
+          <tr>
+            <td>${new Date(log.created_at).toLocaleString()}</td>
+            <td style="text-transform:capitalize;">${log.mode}</td>
+            <td>${log.duration_seconds}s</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        document.getElementById('historyTbody').innerHTML = '<tr><td colspan="3" style="color:red;">Error loading history.</td></tr>';
+      }
+    }
+
+    async function loadProfile() {
+      if (!currentUser) return;
+      try {
+        const res = await fetch(`/api/profile?userId=${currentUser.id}`);
+        const data = await res.json();
+        
+        document.getElementById('profileDetails').innerHTML = `
+          <strong>Name:</strong> ${data.profile.full_name || 'N/A'}<br>
+          <strong>Email:</strong> ${currentUser.email}<br>
+          <strong>Plan:</strong> <span style="text-transform:capitalize; color:#3b82f6; font-weight:bold;">${data.profile.plan}</span><br>
+        `;
+
+        const formatMins = (secs) => (secs/60).toFixed(1);
+        const setProgress = (id, usage, limit) => {
+          const fill = document.getElementById(id + 'Fill');
+          const text = document.getElementById(id + 'Text');
+          if (limit === Infinity || limit === null) {
+            text.innerText = `${formatMins(usage)} / Unlimited mins`;
+            fill.style.width = '0%';
+          } else {
+            text.innerText = `${formatMins(usage)} / ${formatMins(limit)} mins`;
+            fill.style.width = Math.min(100, (usage / limit) * 100) + '%';
+            if (usage >= limit) fill.style.background = '#ef4444'; 
+          }
+        };
+
+        setProgress('dailyUsage', data.usage.daily, data.limits.daily);
+        setProgress('weeklyUsage', data.usage.weekly, data.limits.weekly);
+      } catch (e) {
+        document.getElementById('profileDetails').innerHTML = '<span style="color:red;">Error loading profile.</span>';
+      }
+    }
+
+    // Handle Auth Logic
+    let isLoginMode = true;
+    let currentUser = null;
+
+    function handleAuth(mode) {
+      isLoginMode = (mode === 'signin');
+      document.getElementById('authHeader').innerText = isLoginMode ? 'Sign In' : 'Sign Up';
+      document.getElementById('authToggle').innerText = isLoginMode ? 'Need an account? Sign Up' : 'Already have an account? Sign In';
+      document.getElementById('signupFields').style.display = isLoginMode ? 'none' : 'block';
+      const req = !isLoginMode;
+      document.getElementById('authName').required = req;
+      document.getElementById('authGender').required = req;
+      document.getElementById('authDob').required = req;
+      
+      document.getElementById('authModal').style.display = 'block';
+    }
+
+    document.getElementById('authToggle').addEventListener('click', (e) => {
+      e.preventDefault();
+      handleAuth(isLoginMode ? 'signup' : 'signin');
+    });
+
+    let paymentCompleted = false;
+
+    // Check URL parameters for payment redirects
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('payment_success') === 'true') {
+        paymentCompleted = true;
+        const paidPlan = urlParams.get('plan') || 'pro';
+        document.getElementById('authPlan').value = paidPlan;
+        document.getElementById('authPlan').disabled = true;
+        document.getElementById('paymentSuccessMessage').style.display = 'block';
+        togglePaymentFields(); // Call it manually to refresh the UI
+        handleAuth('signup');
+        // Clean URL
+        window.history.replaceState({}, document.title, "/");
+      } else if (urlParams.get('payment_cancel') === 'true') {
+        alert("Payment was cancelled. You can try again if you wish.");
+        handleAuth('signup');
+        // Clean URL
+        window.history.replaceState({}, document.title, "/");
+      }
+    });
+
+    // Handle Safepay Checkout via Frontend SDK
+    async function handleSafepayCheckout() {
+      const plan = document.getElementById('authPlan').value;
+      if (plan !== 'pro' && plan !== 'enterprise') return;
+      
+      const checkoutBtn = document.getElementById('safepayCheckoutBtn');
+      const origText = checkoutBtn.innerText;
+      checkoutBtn.innerText = 'Initializing...';
+      checkoutBtn.disabled = true;
 
       try {
-        // Send the file to our backend
+        const res = await fetch('/api/safepay/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan })
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to initialize Safepay checkout');
+        }
+        
+        // Redirect to Safepay hosted checkout
+        window.location.href = data.checkoutUrl;
+      } catch (err) {
+        alert(err.message);
+        checkoutBtn.innerText = origText;
+        checkoutBtn.disabled = false;
+      }
+    }
+
+    document.getElementById('authForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('authEmail').value;
+      const password = document.getElementById('authPassword').value;
+      const action = isLoginMode ? 'signin' : 'signup';
+      const payload = { email, password };
+      if (!isLoginMode) {
+        payload.fullName = document.getElementById('authName').value;
+        payload.gender = document.getElementById('authGender').value;
+        payload.dob = document.getElementById('authDob').value;
+        payload.plan = document.getElementById('authPlan').value;
+      }
+      try {
+        const response = await fetch(`/api/auth/${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.error || 'Authentication failed');
+
+        alert(data.message);
+        document.getElementById('authModal').style.display = 'none';
+        currentUser = data.user;
+
+        // Update UI state
+        document.getElementById('welcomeMsg').innerText = `Welcome, ${email}`;
+        document.getElementById('appContent').style.display = 'block';
+        document.getElementById('loginMessage').style.display = 'none';
+        
+        document.getElementById('authButtons').style.display = 'none';
+        document.getElementById('userButtons').style.display = 'flex';
+
+        // Session persistence
+        if (document.getElementById('keepMeLoggedIn').checked) {
+          localStorage.setItem('voxai_user', JSON.stringify(currentUser));
+          sessionStorage.removeItem('voxai_user');
+        } else {
+          sessionStorage.setItem('voxai_user', JSON.stringify(currentUser));
+          localStorage.removeItem('voxai_user');
+        }
+
+        switchTab('transcribe');
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    // Global variables to hold raw transcription and translation
+    let transcriptionText = '';
+    let translationText = '';
+    
+    // --- Audio Recording Logic ---
+    let mediaRecorder;
+    let audioChunks = [];
+    let recordedAudioBlob = null;
+
+    document.getElementById('recordBtn').addEventListener('click', async () => {
+      const recordBtn = document.getElementById('recordBtn');
+      const recordText = document.getElementById('recordText');
+      const recordStatus = document.getElementById('recordStatus');
+      
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        recordText.innerText = 'Record Audio';
+        recordStatus.style.display = 'none';
+        recordBtn.style.borderColor = 'var(--glass-border)';
+      } else {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+          
+          mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+          
+          mediaRecorder.onstop = () => {
+            recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            document.getElementById('fileNameDisplay').innerText = 'Recorded Audio (ready to transcribe)';
+            // clear file input
+            document.getElementById('audioFile').value = '';
+          };
+          
+          mediaRecorder.start();
+          recordText.innerText = 'Stop Recording';
+          recordStatus.style.display = 'inline-block';
+          recordBtn.style.borderColor = '#ef4444';
+        } catch (err) {
+          alert('Microphone access denied or not available.');
+        }
+      }
+    });
+
+    function handleFileChange(input) {
+      recordedAudioBlob = null; // Clear recorded blob if file selected
+      document.getElementById('fileNameDisplay').innerText = input.files[0] ? input.files[0].name : 'Click to browse or drag and drop';
+    }
+
+    // Handle form upload
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const fileInput = document.getElementById('audioFile');
+      if (!fileInput.files[0] && !recordedAudioBlob) {
+        alert('Please upload or record an audio file before transcribing.');
+        return;
+      }
+
+      const form = e.target;
+      const formData = new FormData(form);
+      
+      // If we have a recorded blob, add it to formData, overriding the file input
+      if (recordedAudioBlob) {
+        formData.set('audio', recordedAudioBlob, 'recorded_audio.webm');
+      }
+
+      if (!currentUser) { alert('Please sign in first'); return; }
+      formData.append('userId', currentUser.id);
+      const mode = formData.get('mode');
+      const loadingMsg = document.getElementById('loadingMsg');
+      const submitBtn = document.getElementById('submitBtn');
+
+      loadingMsg.style.display = 'block';
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.7';
+      document.getElementById('resultCard').style.display = 'none';
+      
+      try {
+        const pRes = await fetch(`/api/profile?userId=${currentUser.id}`);
+        if (pRes.ok) {
+          const pData = await pRes.json();
+          if (pData.usage.daily >= pData.limits.daily) {
+            alert(`Daily quota exceeded for ${pData.profile.plan} plan.`);
+            loadingMsg.style.display = 'none';
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = '1';
+            return;
+          }
+        }
+      } catch(e) {}
+
+      try {
         const response = await fetch('/api/transcribe', {
           method: 'POST',
           body: formData
         });
 
         if (!response.ok) {
-          throw new Error('Something went wrong on the server.');
+          const errText = await response.text();
+          throw new Error(errText || 'Something went wrong on the server.');
         }
 
         const text = await response.text();
-        resultDiv.innerHTML = text; // Show the HTML response
+        // Assume API returns JSON with transcription and translation
+        let content = {};
+        try { content = JSON.parse(text); } catch { content = { transcription: text, translation: '' }; }
+        transcriptionText = content.transcription || '';
+        translationText = content.translation || '';
+        let htmlContent = '';
+        if (mode === 'both') {
+          htmlContent = '<h3>Transcription</h3><p>' + transcriptionText.replace(/\n/g, '<br>') + '</p><br><h3>Translation</h3><p>' + translationText.replace(/\n/g, '<br>') + '</p>';
+        } else if (mode === 'transcribe') {
+          htmlContent = '<p>' + transcriptionText.replace(/\n/g, '<br>') + '</p>';
+        } else {
+          htmlContent = '<p>' + translationText.replace(/\n/g, '<br>') + '</p>';
+        }
+        quill.clipboard.dangerouslyPasteHTML(htmlContent);
+
+        document.getElementById('resultCard').style.display = 'block';
       } catch (err) {
-        resultDiv.innerHTML = `<span style="color:red">Error: ${err.message}</span>`;
+        alert(err.message);
       } finally {
         submitBtn.disabled = false;
+        submitBtn.style.opacity = '1';
+        loadingMsg.style.display = 'none';
       }
     });
-  </script>
 
+    // ── PASSWORD TOGGLE ──────────────────────────────────────────
+    document.getElementById('togglePassword').addEventListener('click', () => {
+      const pwd = document.getElementById('authPassword');
+      const btn = document.getElementById('togglePassword');
+      if (pwd.type === 'password') {
+        pwd.type = 'text';
+        btn.innerHTML = '&#128064;'; // open eye
+      } else {
+        pwd.type = 'password';
+        btn.innerHTML = '&#128065;'; // eye
+      }
+    });
+
+    // Copy from Editor helper
+    function copyEditorText() {
+      const textToCopy = quill.getText();
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        const btn = document.getElementById('copyAllText');
+        const origText = btn.innerHTML;
+        btn.innerHTML = '&#10003; Copied!';
+        setTimeout(() => btn.innerHTML = origText, 2000);
+      }).catch(err => {
+        alert('Failed to copy: ' + err);
+      });
+    }
+
+    // Download handlers respecting choice
+    function getContentForDownload() {
+      return quill.root.innerHTML;
+    }
+
+    document.getElementById('downloadPdf').addEventListener('click', () => {
+      const textContent = quill.getText().trim();
+      if (!textContent) { 
+        alert('No content to download yet. Please transcribe an audio file first.'); 
+        return; 
+      }
+      if (!confirm("Download as PDF?")) return;
+
+      const editor = document.getElementById('editor-container');
+      const qlEditor = editor.querySelector('.ql-editor');
+      
+      // Save original styles
+      const origBg = editor.style.background;
+      const origBorder = editor.style.border;
+      const origColor = qlEditor.style.color;
+
+      // Apply print styles (white background, black text, no border)
+      editor.style.background = '#ffffff';
+      editor.style.border = 'none';
+      qlEditor.style.color = '#000000';
+
+      const opt = {
+        margin: [0.75, 0.75, 0.75, 0.75],
+        filename: 'voxai_result.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+
+      // Give the browser a tiny delay to repaint the white background before capturing
+      setTimeout(() => {
+        html2pdf().from(editor).set(opt).save().then(() => {
+          // Restore original dark theme styles
+          editor.style.background = origBg;
+          editor.style.border = origBorder;
+          qlEditor.style.color = origColor;
+        });
+      }, 150);
+    });
+
+
+    document.getElementById('downloadDocx').addEventListener('click', () => {
+      if (!confirm("Are you sure you want to download as DOCX?")) return;
+      const content = getContentForDownload();
+      const html = `<p>${content.replace(/\n/g, '<br>')}</p>`;
+      const docxHtml = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head><meta charset='utf-8'><title>Transcription</title></head>
+        <body>${html}</body></html>
+      `;
+      const blob = new Blob(['\ufeff', docxHtml], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'transcription.doc';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    // Handle search form
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = document.getElementById('searchInput').value;
+      const resultsContainer = document.getElementById('searchResults');
+      
+      if (!q) {
+        resultsContainer.style.display = 'none';
+        return;
+      }
+      
+      resultsContainer.style.display = 'block';
+      resultsContainer.innerHTML = '<div style="padding: 0.5rem; color: var(--text-muted); text-align: center;">Searching...</div>';
+      
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        
+        if (!data.results || data.results.length === 0) {
+          resultsContainer.innerHTML = '<div style="padding: 0.5rem; color: var(--text-muted); text-align: center;">No results found.</div>';
+          return;
+        }
+
+        resultsContainer.innerHTML = data.results.map(item => `
+          <div style="padding: 0.75rem; border-bottom: 1px solid var(--glass-border); cursor: pointer;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">${item.title || 'Result'}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; text-transform: capitalize;">Type: ${item.type || 'unknown'}</div>
+          </div>
+        `).join('');
+      } catch (err) {
+        resultsContainer.innerHTML = '<div style="padding: 0.5rem; color: #ef4444; text-align: center;">Search failed.</div>';
+      }
+    });
+
+    // Close search results when clicking outside
+    document.addEventListener('click', (e) => {
+      const searchContainer = document.querySelector('.search-container');
+      if (!searchContainer.contains(e.target)) {
+        document.getElementById('searchResults').style.display = 'none';
+      }
+    });
+
+    // Fetch and display products and restore session
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Restore user session if it exists
+      const storedUser = localStorage.getItem('voxai_user') || sessionStorage.getItem('voxai_user');
+      if (storedUser) {
+        try {
+          currentUser = JSON.parse(storedUser);
+          document.getElementById('welcomeMsg').innerText = `Welcome, ${currentUser.email}`;
+          document.getElementById('appContent').style.display = 'block';
+          document.getElementById('loginMessage').style.display = 'none';
+          document.getElementById('authButtons').style.display = 'none';
+          document.getElementById('userButtons').style.display = 'flex';
+          switchTab('transcribe');
+        } catch (e) {
+          localStorage.removeItem('voxai_user');
+          sessionStorage.removeItem('voxai_user');
+        }
+      }
+
+      const productsList = document.getElementById('productsList');
+      try {
+        const response = await fetch('/api/products');
+        if (!response.ok) {
+          throw new Error('Failed to load products.');
+        }
+        const products = await response.json();
+
+        if (!products || products.length === 0) {
+          productsList.innerHTML = '<span style="color: var(--text-muted);">No plans available at the moment.</span>';
+          return;
+        }
+
+        productsList.innerHTML = products.map(p => `
+          <div class="product-card">
+            <h3 style="font-size: 1.25rem;">${p.name}</h3>
+            <div class="product-price">$${Number(p.price).toFixed(2)}</div>
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">${p.description || ''}</p>
+            <ul style="padding-left: 1.2rem; color: #cbd5e1; font-size: 0.9rem;">
+              ${(p.features || []).map(f => `<li style="margin-bottom:0.5rem;">${f}</li>`).join('')}
+            </ul>
+          </div>
+        `).join('');
+      } catch (err) {
+        productsList.innerHTML = `<span style="color:#ef4444">Error: ${err.message}</span>`;
+      }
+    });
+
+    function togglePaymentFields() {
+      const plan = document.getElementById('authPlan').value;
+      const paymentSection = document.getElementById('safepayPaymentSection');
+      const checkoutBtn = document.getElementById('safepayCheckoutBtn');
+      const submitBtn = document.getElementById('authSubmitBtn');
+      
+      if (plan === 'pro' || plan === 'enterprise') {
+        paymentSection.style.display = 'block';
+        if (paymentCompleted) {
+          checkoutBtn.style.display = 'none';
+          submitBtn.style.display = 'block';
+        } else {
+          checkoutBtn.style.display = 'block';
+          submitBtn.style.display = 'none';
+        }
+      } else {
+        paymentSection.style.display = 'none';
+        checkoutBtn.style.display = 'none';
+        submitBtn.style.display = 'block';
+      }
+    }
+
+    // Logout function
+    function logout() {
+      // Clear client‑side session (Supabase stores JWT in localStorage)
+      if (window.localStorage) window.localStorage.removeItem('supabase.auth.token');
+      localStorage.removeItem('voxai_user');
+      sessionStorage.removeItem('voxai_user');
+      
+      currentUser = null;
+      document.getElementById('appContent').style.display = 'none';
+      document.getElementById('loginMessage').style.display = 'block';
+      document.getElementById('welcomeMsg').innerText = 'Welcome';
+
+      document.getElementById('authButtons').style.display = 'flex';
+      document.getElementById('userButtons').style.display = 'none';
+    }
+  </script>
 </body>
+
 </html>
