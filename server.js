@@ -18,16 +18,17 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 // Ensure we have an 'uploads' folder to save files
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const os = require('os');
+const UPLOADS_DIR = process.env.VERCEL ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR);
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
 // Set up 'multer' to save uploaded files to the 'uploads' folder
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: UPLOADS_DIR });
 
 // Serve static files from the public directory
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Parse incoming form data and JSON
 app.use(express.urlencoded({ extended: true }));
@@ -248,12 +249,18 @@ Example format:
 
 // POST handler for user sign up
 app.post('/api/auth/signup', async (req, res) => {
-  const { email, password, fullName, gender, dob, plan } = req.body;
+  const { email, password, fullName, gender, dob, plan, baseUrl } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   
+  const signUpOptions = {};
+  if (baseUrl) {
+    signUpOptions.emailRedirectTo = baseUrl;
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: signUpOptions
   });
 
   if (error) {
@@ -268,7 +275,7 @@ app.post('/api/auth/signup', async (req, res) => {
   }
   
   if (data.user) {
-    const { error: profileError } = await supabase.from('user_profiles').insert({
+    const { error: profileError } = await supabase.from('user_profiles').upsert({
       id: data.user.id,
       full_name: fullName || '',
       gender: gender || '',
@@ -392,7 +399,7 @@ app.get('/api/search', async (req, res) => {
 
 // --- SAFEPAY INTEGRATION ---
 app.post('/api/safepay/checkout', async (req, res) => {
-  const { plan } = req.body;
+  const { plan, baseUrl: clientBaseUrl } = req.body;
   let amount = 0;
   
   if (plan === 'pro') amount = 1000.00;
@@ -448,7 +455,7 @@ app.post('/api/safepay/checkout', async (req, res) => {
 
     const tracker = data.data.token;
     const orderId = `voxai_${Date.now()}`;
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = clientBaseUrl || `${req.protocol}://${req.get('host')}`;
     const redirectUrl = encodeURIComponent(`${baseUrl}/success?plan=${plan}`);
     const cancelUrl = encodeURIComponent(`${baseUrl}/cancel`);
     const checkoutUrl = `https://sandbox.api.getsafepay.com/checkout/pay?env=sandbox&beacon=${tracker}&source=custom&order_id=${orderId}&redirect_url=${redirectUrl}&cancel_url=${cancelUrl}`;
@@ -501,7 +508,12 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// Start the server
-app.listen(port, () => {
-  console.log(`🚀 Simple Server is running at http://localhost:${port}`);
-});
+// Start the server only if not running on Vercel
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`🚀 Simple Server is running at http://localhost:${port}`);
+  });
+}
+
+// Export the Express API so Vercel can use it as a serverless function
+module.exports = app;

@@ -501,7 +501,10 @@
         <div id="authHeader" class="modal-header">Sign In</div>
         
         <form id="authForm">
-          <div id="paymentSuccessMessage" style="display:none; color: #10b981; background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; border-radius: 6px; padding: 10px; margin-bottom: 15px; text-align: center; font-weight: 600;">Payment completed! Please complete your registration.</div>
+          <div id="paymentSuccessMessage" style="display:none; color: #10b981; background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; border-radius: 6px; padding: 15px; margin-bottom: 15px; text-align: center; font-weight: 600;">
+            Payment successful! Please confirm your email to activate your account.
+            <button type="button" class="btn btn-primary" style="margin-top:15px; width:100%;" onclick="handleAuth('signin')">Login Now</button>
+          </div>
           <input type="email" id="authEmail" placeholder="Email Address" required>
           
           <div id="signupFields" style="display:none;">
@@ -513,21 +516,11 @@
               <option value="Other">Other</option>
             </select>
             <input type="date" id="authDob" style="width:100%; padding:10px; margin: 10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:white;">
-            <select id="authPlan" onchange="togglePaymentFields()" style="width:100%; padding:10px; margin:10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:white;">
+            <select id="authPlan" style="width:100%; padding:10px; margin:10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:white;">
               <option value="basic">Basic Plan (5m/day)</option>
               <option value="pro">Pro Plan (30m/day)</option>
               <option value="enterprise">Enterprise Plan (60m/day)</option>
             </select>
-            
-            <div id="safepayPaymentSection" style="display:none; padding:10px; margin: 10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); text-align:center;">
-              <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 0.85rem;">Payment Details (Safepay)</label>
-              <div style="padding: 15px; background: rgba(0,0,0,0.3); border-radius: 6px; border: 1px dashed var(--glass-border);">
-                <p style="font-size: 0.9rem; color: #3b82f6; margin-bottom: 10px;">🔒 Complete your payment securely below.</p>
-                <!-- Container for dynamic Safepay button -->
-                <div id="safepay-button-container"></div>
-                <button type="button" id="safepayCheckoutBtn" class="btn btn-primary" style="font-size:0.8rem;" onclick="handleSafepayCheckout()">Initialize Safepay</button>
-              </div>
-            </div>
           </div>
 
           <div class="password-wrapper">
@@ -820,60 +813,15 @@
       handleAuth(isLoginMode ? 'signup' : 'signin');
     });
 
-    let paymentCompleted = false;
-
-    // Check URL parameters for payment redirects
-    window.addEventListener('DOMContentLoaded', () => {
+    // Check URL parameters for payment redirects (legacy fallback)
+    window.addEventListener('DOMContentLoaded', async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('payment_success') === 'true') {
-        paymentCompleted = true;
-        const paidPlan = urlParams.get('plan') || 'pro';
-        document.getElementById('authPlan').value = paidPlan;
-        document.getElementById('authPlan').disabled = true;
-        document.getElementById('paymentSuccessMessage').style.display = 'block';
-        togglePaymentFields(); // Call it manually to refresh the UI
-        handleAuth('signup');
-        // Clean URL
-        window.history.replaceState({}, document.title, "/");
-      } else if (urlParams.get('payment_cancel') === 'true') {
+      if (urlParams.get('payment_cancel') === 'true') {
         alert("Payment was cancelled. You can try again if you wish.");
         handleAuth('signup');
-        // Clean URL
         window.history.replaceState({}, document.title, "/");
       }
     });
-
-    // Handle Safepay Checkout via Frontend SDK
-    async function handleSafepayCheckout() {
-      const plan = document.getElementById('authPlan').value;
-      if (plan !== 'pro' && plan !== 'enterprise') return;
-      
-      const checkoutBtn = document.getElementById('safepayCheckoutBtn');
-      const origText = checkoutBtn.innerText;
-      checkoutBtn.innerText = 'Initializing...';
-      checkoutBtn.disabled = true;
-
-      try {
-        const res = await fetch('/api/safepay/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ plan })
-        });
-        
-        const data = await res.json();
-        
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to initialize Safepay checkout');
-        }
-        
-        // Redirect to Safepay hosted checkout
-        window.location.href = data.checkoutUrl;
-      } catch (err) {
-        alert(err.message);
-        checkoutBtn.innerText = origText;
-        checkoutBtn.disabled = false;
-      }
-    }
 
     document.getElementById('authForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -887,6 +835,14 @@
         payload.dob = document.getElementById('authDob').value;
         payload.plan = document.getElementById('authPlan').value;
       }
+
+      payload.baseUrl = window.location.origin;
+
+      const submitBtn = document.getElementById('authSubmitBtn');
+      const origText = submitBtn.innerText;
+      submitBtn.innerText = 'Processing...';
+      submitBtn.disabled = true;
+
       try {
         const response = await fetch(`/api/auth/${action}`, {
           method: 'POST',
@@ -896,6 +852,38 @@
         const data = await response.json();
 
         if (!response.ok) throw new Error(data.error || 'Authentication failed');
+
+        // If signup requires email confirmation
+        if (action === 'signup' && !data.session) {
+          // If paid plan, trigger checkout in new tab
+          if (payload.plan === 'pro' || payload.plan === 'enterprise') {
+            try {
+              const res = await fetch('/api/safepay/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ plan: payload.plan, baseUrl: window.location.origin })
+              });
+              const checkoutData = await res.json();
+              if (res.ok && checkoutData.checkoutUrl) {
+                // Open checkout in new tab
+                window.open(checkoutData.checkoutUrl, '_blank');
+              }
+            } catch(e) {
+              console.error('Checkout init failed:', e);
+            }
+          }
+          
+          handleAuth('signin');
+          document.getElementById('paymentSuccessMessage').innerHTML = `
+            Registration successful! ${payload.plan !== 'basic' ? '<br>A new tab was opened for your payment.' : ''}
+            <br>Please confirm your email to activate your account.
+            <button type="button" class="btn btn-primary" style="margin-top:15px; width:100%;" onclick="handleAuth('signin')">Login Now</button>
+          `;
+          document.getElementById('paymentSuccessMessage').style.display = 'block';
+          submitBtn.innerText = origText;
+          submitBtn.disabled = false;
+          return;
+        }
 
         alert(data.message);
         document.getElementById('authModal').style.display = 'none';
@@ -921,6 +909,8 @@
         switchTab('transcribe');
       } catch (err) {
         alert(err.message);
+        submitBtn.innerText = origText;
+        submitBtn.disabled = false;
       }
     });
 
@@ -1235,27 +1225,7 @@
       }
     });
 
-    function togglePaymentFields() {
-      const plan = document.getElementById('authPlan').value;
-      const paymentSection = document.getElementById('safepayPaymentSection');
-      const checkoutBtn = document.getElementById('safepayCheckoutBtn');
-      const submitBtn = document.getElementById('authSubmitBtn');
-      
-      if (plan === 'pro' || plan === 'enterprise') {
-        paymentSection.style.display = 'block';
-        if (paymentCompleted) {
-          checkoutBtn.style.display = 'none';
-          submitBtn.style.display = 'block';
-        } else {
-          checkoutBtn.style.display = 'block';
-          submitBtn.style.display = 'none';
-        }
-      } else {
-        paymentSection.style.display = 'none';
-        checkoutBtn.style.display = 'none';
-        submitBtn.style.display = 'block';
-      }
-    }
+
 
     // Logout function
     function logout() {
