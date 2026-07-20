@@ -1,9 +1,10 @@
 {
-  "version": 2,
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.js"
-    }
+    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
+    { "source": "/success", "destination": "/api/index.js" },
+    { "source": "/cancel", "destination": "/api/index.js" },
+    { "source": "/test-api", "destination": "/api/index.js" },
+    { "source": "/(.*)", "destination": "/public/$1" }
   ]
 }
