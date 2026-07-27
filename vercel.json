@@ -5,6 +5,7 @@
     { "source": "/success", "destination": "/api/index.js" },
     { "source": "/cancel", "destination": "/api/index.js" },
     { "source": "/test-api", "destination": "/api/index.js" },
+    { "source": "/googledb2a86f8699b9aee.html", "destination": "/api/index.js" },
     { "source": "/(.*)", "destination": "/public/$1" }
   ]
 }

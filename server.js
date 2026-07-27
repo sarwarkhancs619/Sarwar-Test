@@ -39,6 +39,11 @@ app.get('/test-api', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'test-api.html'));
 });
 
+// Serve Google Search Console verification file directly
+app.get('/googledb2a86f8699b9aee.html', (req, res) => {
+  res.send('google-site-verification: googledb2a86f8699b9aee.html');
+});
+
 // Cache for products
 let cachedProducts = null;
 let productsCacheTime = 0;
