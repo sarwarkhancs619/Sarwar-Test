@@ -461,6 +461,37 @@
     .ql-font-times-new-roman {
       font-family: "Times New Roman", serif;
     }
+
+    /* Font Dropdown Labels */
+    .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="arial"]::before,
+    .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="arial"]::before {
+      content: 'Arial';
+      font-family: 'Arial', sans-serif;
+    }
+    .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="calibri"]::before,
+    .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="calibri"]::before {
+      content: 'Calibri';
+      font-family: 'Calibri', sans-serif;
+    }
+    .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="times-new-roman"]::before,
+    .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="times-new-roman"]::before {
+      content: 'Times New Roman';
+      font-family: 'Times New Roman', serif;
+    }
+
+    /* Size Dropdown Labels */
+    .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="12px"]::before,
+    .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]::before { content: '12px'; }
+    .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="14px"]::before,
+    .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="14px"]::before { content: '14px'; }
+    .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="16px"]::before,
+    .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="16px"]::before { content: '16px'; }
+    .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="18px"]::before,
+    .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="18px"]::before { content: '18px'; }
+    .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="20px"]::before,
+    .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="20px"]::before { content: '20px'; }
+    .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="24px"]::before,
+    .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]::before { content: '24px'; }
   </style>
 </head>
 
@@ -540,15 +571,9 @@
       </div>
     </div>
 
-    <div id="loginMessage"
-      style="text-align: center; margin: 3rem 0; padding: 2rem; border: 1px dashed var(--glass-border); border-radius: 12px;">
-      <h3>Please sign in or create an account to use the transcription tool.</h3>
-      <button class="btn btn-primary" style="margin-top: 15px;" onclick="handleAuth('signin')">Sign In Now</button>
-    </div>
-
-    <div id="appContent" style="display: none;">
+    <div id="appContent" style="display: block;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <span id="welcomeMsg" style="color: var(--text-main); font-weight: 600;">Welcome</span>
+        <span id="welcomeMsg" style="color: var(--text-main); font-weight: 600;">Welcome, Guest (Free Plan)</span>
       </div>
 
       <div class="tabs">
@@ -582,6 +607,8 @@
             </label>
             <input type="file" id="audioFile" name="audio" accept="audio/*"
               onchange="handleFileChange(this)">
+            
+            <audio id="audioPlayback" controls style="display:none; width:100%; margin-top:10px;"></audio>
           </div>
 
           
@@ -728,6 +755,10 @@
     }
 
     function switchTab(tabId) {
+      if (!currentUser && (tabId === 'history' || tabId === 'account')) {
+        handleAuth('signup');
+        return;
+      }
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
       document.querySelector(`button[onclick="switchTab('${tabId}')"]`).classList.add('active');
@@ -892,8 +923,6 @@
 
         // Update UI state
         document.getElementById('welcomeMsg').innerText = `Welcome, ${email}`;
-        document.getElementById('appContent').style.display = 'block';
-        document.getElementById('loginMessage').style.display = 'none';
         
         document.getElementById('authButtons').style.display = 'none';
         document.getElementById('userButtons').style.display = 'flex';
@@ -949,6 +978,11 @@
             document.getElementById('fileNameDisplay').innerText = 'Recorded Audio (ready to transcribe)';
             // clear file input
             document.getElementById('audioFile').value = '';
+            
+            // setup audio playback
+            const audioPlayback = document.getElementById('audioPlayback');
+            audioPlayback.src = URL.createObjectURL(recordedAudioBlob);
+            audioPlayback.style.display = 'block';
           };
           
           mediaRecorder.start();
@@ -963,7 +997,16 @@
 
     function handleFileChange(input) {
       recordedAudioBlob = null; // Clear recorded blob if file selected
-      document.getElementById('fileNameDisplay').innerText = input.files[0] ? input.files[0].name : 'Click to browse or drag and drop';
+      const audioPlayback = document.getElementById('audioPlayback');
+      if (input.files && input.files[0]) {
+        document.getElementById('fileNameDisplay').innerText = input.files[0].name;
+        audioPlayback.src = URL.createObjectURL(input.files[0]);
+        audioPlayback.style.display = 'block';
+      } else {
+        document.getElementById('fileNameDisplay').innerText = 'Click to browse or drag and drop';
+        audioPlayback.src = '';
+        audioPlayback.style.display = 'none';
+      }
     }
 
     // Handle form upload
@@ -984,8 +1027,9 @@
         formData.set('audio', recordedAudioBlob, 'recorded_audio.webm');
       }
 
-      if (!currentUser) { alert('Please sign in first'); return; }
-      formData.append('userId', currentUser.id);
+      if (currentUser) {
+        formData.append('userId', currentUser.id);
+      }
       const mode = formData.get('mode');
       const loadingMsg = document.getElementById('loadingMsg');
       const submitBtn = document.getElementById('submitBtn');
@@ -995,19 +1039,21 @@
       submitBtn.style.opacity = '0.7';
       document.getElementById('resultCard').style.display = 'none';
       
-      try {
-        const pRes = await fetch(`/api/profile?userId=${currentUser.id}`);
-        if (pRes.ok) {
-          const pData = await pRes.json();
-          if (pData.usage.daily >= pData.limits.daily) {
-            alert(`Daily quota exceeded for ${pData.profile.plan} plan.`);
-            loadingMsg.style.display = 'none';
-            submitBtn.disabled = false;
-            submitBtn.style.opacity = '1';
-            return;
+      if (currentUser) {
+        try {
+          const pRes = await fetch(`/api/profile?userId=${currentUser.id}`);
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            if (pData.usage.daily >= pData.limits.daily) {
+              alert(`Daily quota exceeded for ${pData.profile.plan} plan.`);
+              loadingMsg.style.display = 'none';
+              submitBtn.disabled = false;
+              submitBtn.style.opacity = '1';
+              return;
+            }
           }
-        }
-      } catch(e) {}
+        } catch(e) {}
+      }
 
       try {
         const response = await fetch('/api/transcribe', {
@@ -1017,6 +1063,10 @@
 
         if (!response.ok) {
           const errText = await response.text();
+          if (errText === 'FREE_PLAN_EXCEEDED') {
+            handleAuth('signup');
+            throw new Error('Free plan limit exceeded. Please sign up and upgrade to Pro or Enterprise to continue.');
+          }
           throw new Error(errText || 'Something went wrong on the server.');
         }
 
@@ -1113,6 +1163,11 @@
           editor.style.background = origBg;
           editor.style.border = origBorder;
           qlEditor.style.color = origColor;
+          
+          // Refresh page after download completes
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
         });
       }, 150);
     });
@@ -1124,7 +1179,15 @@
       const html = `<p>${content.replace(/\n/g, '<br>')}</p>`;
       const docxHtml = `
         <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head><meta charset='utf-8'><title>Transcription</title></head>
+        <head>
+          <meta charset='utf-8'>
+          <title>Transcription</title>
+          <style>
+            .ql-font-arial { font-family: Arial, sans-serif; }
+            .ql-font-calibri { font-family: Calibri, sans-serif; }
+            .ql-font-times-new-roman { font-family: "Times New Roman", serif; }
+          </style>
+        </head>
         <body>${html}</body></html>
       `;
       const blob = new Blob(['\ufeff', docxHtml], { type: 'application/msword' });
@@ -1135,6 +1198,11 @@
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      // Refresh page after download triggers
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     });
 
     // Handle search form
@@ -1187,8 +1255,6 @@
         try {
           currentUser = JSON.parse(storedUser);
           document.getElementById('welcomeMsg').innerText = `Welcome, ${currentUser.email}`;
-          document.getElementById('appContent').style.display = 'block';
-          document.getElementById('loginMessage').style.display = 'none';
           document.getElementById('authButtons').style.display = 'none';
           document.getElementById('userButtons').style.display = 'flex';
           switchTab('transcribe');

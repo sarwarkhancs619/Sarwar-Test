@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoxAI - Admin Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #f97316 100%);
+      --glass-bg: rgba(255, 255, 255, 0.05);
+      --glass-border: rgba(255, 255, 255, 0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background: var(--glass-bg);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .brand {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .container { max-width: 1000px; margin: 3rem auto; padding: 0 1rem; width: 100%; }
+    .glass-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+    .dashboard-stats {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .stat-box {
+      flex: 1;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .stat-number {
+      font-size: 2.5rem;
+      font-weight: 700;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+    .users-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    .users-table th, .users-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .users-table th { color: var(--text-muted); }
+    .plan-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    .plan-basic { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .plan-pro { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
+    .plan-enterprise { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .plan-free { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="brand">VoxAI Admin</div>
+    <a href="/" style="color: var(--text-muted); text-decoration: none;">Back to App</a>
+  </nav>
+
+  <div class="container">
+    <div class="header-text" style="margin-bottom: 2rem;">
+      <h1 style="font-size: 2rem;">Dashboard</h1>
+      <p style="color: var(--text-muted);">Overview of all users, their plans, and system usage.</p>
+    </div>
+
+    <div class="dashboard-stats">
+      <div class="stat-box">
+        <div class="stat-number" id="totalUsers">0</div>
+        <div style="color: var(--text-muted);">Total Signups</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-number" id="totalUsage">0</div>
+        <div style="color: var(--text-muted);">Total Usage (mins)</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-number" id="proUsers">0</div>
+        <div style="color: var(--text-muted);">Pro / Enterprise Users</div>
+      </div>
+    </div>
+
+    <div class="glass-card">
+      <h3 style="margin-bottom:1rem;">User List</h3>
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Plan</th>
+            <th>Usage (mins)</th>
+          </tr>
+        </thead>
+        <tbody id="usersTbody">
+          <tr><td colspan="4" style="text-align:center; padding: 2rem;">Loading data...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function loadDashboard() {
+      try {
+        const res = await fetch('/api/admin/users');
+        const data = await res.json();
+        
+        let totalUsage = 0;
+        let proCount = 0;
+        
+        const tbody = document.getElementById('usersTbody');
+        
+        if (data && data.length > 0) {
+          // Sort by usage descending
+          data.sort((a, b) => b.usage - a.usage);
+          
+          tbody.innerHTML = data.map(user => {
+            totalUsage += user.usage;
+            if (user.plan === 'pro' || user.plan === 'enterprise') proCount++;
+            
+            let badgeClass = 'plan-basic';
+            if (user.plan === 'pro') badgeClass = 'plan-pro';
+            else if (user.plan === 'enterprise') badgeClass = 'plan-enterprise';
+            else if (user.plan === 'free') badgeClass = 'plan-free';
+            
+            return `
+              <tr>
+                <td>${user.email}</td>
+                <td>${user.full_name || 'N/A'}</td>
+                <td><span class="plan-badge ${badgeClass}">${user.plan}</span></td>
+                <td>${(user.usage / 60).toFixed(1)}</td>
+              </tr>
+            `;
+          }).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No users found.</td></tr>';
+        }
+        
+        document.getElementById('totalUsers').innerText = data.filter(u => u.plan !== 'free').length;
+        document.getElementById('totalUsage').innerText = (totalUsage / 60).toFixed(1);
+        document.getElementById('proUsers').innerText = proCount;
+        
+      } catch (e) {
+        document.getElementById('usersTbody').innerHTML = '<tr><td colspan="4" style="color:red; text-align:center;">Failed to load dashboard data.</td></tr>';
+      }
+    }
+    
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+  </script>
+</body>
+</html>

@@ -44,10 +44,34 @@ app.get('/googledb2a86f8699b9aee.html', (req, res) => {
   res.send('google-site-verification: googledb2a86f8699b9aee.html');
 });
 
+// Basic Auth Middleware for Admin
+const basicAuth = (req, res, next) => {
+  const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
+  const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
+
+  const adminUser = process.env.ADMIN_USERNAME || 'admin';
+  const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+
+  if (login && password && login === adminUser && password === adminPass) {
+    return next();
+  }
+
+  res.set('WWW-Authenticate', 'Basic realm="VoxAI Admin"');
+  res.status(401).send('Authentication required.');
+};
+
+// Serve the admin dashboard at /admin (protected)
+app.get('/admin', basicAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
 // Cache for products
 let cachedProducts = null;
 let productsCacheTime = 0;
 const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+
+// In-memory anonymous usage tracking
+const anonymousUsage = {}; // IP -> daily usage in seconds
 
 // GET all products from Supabase
 app.get('/api/products', async (req, res) => {
@@ -119,11 +143,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     const userId = req.body.userId;
     const mode = req.body.mode || 'both';
 
-    if (!userId) {
-      fs.unlinkSync(filePath);
-      return res.status(401).send('User ID required.');
-    }
-
     let durationSeconds = 60; // fallback
     try {
       const metadata = await mm.parseFile(filePath);
@@ -134,50 +153,64 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       console.warn('Could not parse audio duration:', e);
     }
 
-    // Check quotas
-    let { data: profile } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
-    if (!profile) {
-      profile = { plan: 'basic' };
+    const isAnonymous = !userId;
+    let planName = 'basic';
+
+    if (isAnonymous) {
+      const ip = req.ip;
+      const currentUsage = anonymousUsage[ip] || 0;
+      const dailyLimit = 5 * 60;
+      if (currentUsage + durationSeconds > dailyLimit) {
+        fs.unlinkSync(filePath);
+        return res.status(429).send(`FREE_PLAN_EXCEEDED`);
+      }
+    } else {
+      // Check quotas for logged in user
+      let { data: profile } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
+      if (!profile) {
+        profile = { plan: 'basic' };
+      }
+      planName = profile.plan;
+
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const weekAgo = new Date(today);
+      weekAgo.setDate(today.getDate() - 7);
+
+      const { data: usageLogs } = await supabase.from('usage_logs')
+        .select('duration_seconds, created_at')
+        .eq('user_id', userId)
+        .gte('created_at', weekAgo.toISOString());
+      
+      let dailyUsage = 0;
+      let weeklyUsage = 0;
+      (usageLogs || []).forEach(log => {
+        const logDate = new Date(log.created_at);
+        weeklyUsage += log.duration_seconds;
+        if (logDate >= today) dailyUsage += log.duration_seconds;
+      });
+
+      let dailyLimit = 5 * 60;
+      let weeklyLimit = 35 * 60;
+      if (profile.plan === 'pro') {
+        dailyLimit = 30 * 60;
+        weeklyLimit = Infinity;
+      } else if (profile.plan === 'enterprise') {
+        dailyLimit = 60 * 60;
+        weeklyLimit = Infinity;
+      }
+
+      if (dailyUsage + durationSeconds > dailyLimit) {
+        fs.unlinkSync(filePath);
+        return res.status(429).send(`Daily limit exceeded for ${profile.plan} plan. Daily limit is ${dailyLimit/60} mins.`);
+      }
+      if (weeklyUsage + durationSeconds > weeklyLimit) {
+        fs.unlinkSync(filePath);
+        return res.status(429).send(`Weekly limit exceeded for ${profile.plan} plan. Weekly limit is ${weeklyLimit/60} mins.`);
+      }
     }
 
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const weekAgo = new Date(today);
-    weekAgo.setDate(today.getDate() - 7);
-
-    const { data: usageLogs } = await supabase.from('usage_logs')
-      .select('duration_seconds, created_at')
-      .eq('user_id', userId)
-      .gte('created_at', weekAgo.toISOString());
-    
-    let dailyUsage = 0;
-    let weeklyUsage = 0;
-    (usageLogs || []).forEach(log => {
-      const logDate = new Date(log.created_at);
-      weeklyUsage += log.duration_seconds;
-      if (logDate >= today) dailyUsage += log.duration_seconds;
-    });
-
-    let dailyLimit = 5 * 60;
-    let weeklyLimit = 35 * 60;
-    if (profile.plan === 'pro') {
-      dailyLimit = 30 * 60;
-      weeklyLimit = Infinity;
-    } else if (profile.plan === 'enterprise') {
-      dailyLimit = 60 * 60;
-      weeklyLimit = Infinity;
-    }
-
-    if (dailyUsage + durationSeconds > dailyLimit) {
-      fs.unlinkSync(filePath);
-      return res.status(429).send(`Daily limit exceeded for ${profile.plan} plan. Daily limit is ${dailyLimit/60} mins.`);
-    }
-    if (weeklyUsage + durationSeconds > weeklyLimit) {
-      fs.unlinkSync(filePath);
-      return res.status(429).send(`Weekly limit exceeded for ${profile.plan} plan. Weekly limit is ${weeklyLimit/60} mins.`);
-    }
-
-    console.log(`Processing audio for user ${userId}. Target language: ${targetLang}, Mode: ${mode}, Duration: ${durationSeconds}s`);
+    console.log(`Processing audio for user ${userId || 'anonymous'}. Target language: ${targetLang}, Mode: ${mode}, Duration: ${durationSeconds}s`);
 
     // Step 1: Upload the audio file to Google Gemini
     const uploadResult = await ai.files.upload({
@@ -224,11 +257,16 @@ Example format:
     fs.unlinkSync(filePath);
 
     // Log usage
-    await supabase.from('usage_logs').insert({
-      user_id: userId,
-      duration_seconds: durationSeconds,
-      mode: mode
-    });
+    if (isAnonymous) {
+      const ip = req.ip;
+      anonymousUsage[ip] = (anonymousUsage[ip] || 0) + durationSeconds;
+    } else {
+      await supabase.from('usage_logs').insert({
+        user_id: userId,
+        duration_seconds: durationSeconds,
+        mode: mode
+      });
+    }
 
     // Parse the JSON response from Gemini
     let rawText = response.text.trim();
@@ -510,6 +548,55 @@ app.get('/api/users', async (req, res) => {
   } catch (err) {
     console.error('Error fetching users:', err);
     res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// Admin Dashboard Endpoint (protected)
+app.get('/api/admin/users', basicAuth, async (req, res) => {
+  try {
+    // 1. Get all profiles
+    const { data: profiles } = await supabase.from('user_profiles').select('*');
+    // 2. Get all users (email, id)
+    const { data: authUsers } = await supabase.from('users').select('id,email');
+    // 3. Get all usage_logs
+    const { data: usageLogs } = await supabase.from('usage_logs').select('*');
+    
+    // Combine data
+    const userMap = {};
+    if (authUsers) {
+      authUsers.forEach(u => userMap[u.id] = { id: u.id, email: u.email, plan: 'basic', usage: 0, full_name: 'N/A' });
+    }
+    if (profiles) {
+      profiles.forEach(p => {
+        if (!userMap[p.id]) userMap[p.id] = { id: p.id, email: 'Unknown', plan: p.plan, usage: 0, full_name: p.full_name };
+        else {
+          userMap[p.id].plan = p.plan;
+          userMap[p.id].full_name = p.full_name;
+        }
+      });
+    }
+    if (usageLogs) {
+      usageLogs.forEach(l => {
+        if (userMap[l.user_id]) {
+          userMap[l.user_id].usage += l.duration_seconds;
+        }
+      });
+    }
+    
+    // Add anonymous users from memory
+    const anonUsers = Object.keys(anonymousUsage).map(ip => ({
+      id: ip,
+      email: 'Anonymous (' + ip + ')',
+      full_name: 'Guest',
+      plan: 'free',
+      usage: anonymousUsage[ip]
+    }));
+
+    const result = Object.values(userMap).concat(anonUsers);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('Admin API error:', err);
+    res.status(500).json({ error: 'Failed to fetch admin data' });
   }
 });
 
