@@ -295,7 +295,14 @@ app.post('/api/auth/signup', async (req, res) => {
   const { email, password, fullName, gender, dob, plan, baseUrl } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   
-  const signUpOptions = {};
+  const signUpOptions = {
+    data: {
+      full_name: fullName || '',
+      gender: gender || '',
+      dob: dob || null,
+      plan: plan || 'basic'
+    }
+  };
   if (baseUrl) {
     signUpOptions.emailRedirectTo = baseUrl;
   }
@@ -329,6 +336,38 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 
   res.status(201).json({ message: 'User created successfully', user: data.user, session: data.session });
+});
+
+// POST handler to update profile using user session
+app.post('/api/profile/update', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { id, fullName, plan, gender, dob } = req.body;
+  if (!id) return res.status(400).json({ error: 'User ID is required' });
+
+  try {
+    const userSupabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } }
+    });
+
+    const { error } = await userSupabase.from('user_profiles').upsert({
+      id,
+      full_name: fullName || '',
+      gender: gender || '',
+      dob: dob || null,
+      plan: plan || 'basic'
+    });
+
+    if (error) {
+      console.error('Supabase profile update error:', error.message);
+      return res.status(500).json({ error: error.message });
+    }
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // GET profile and usage
@@ -442,7 +481,7 @@ app.get('/api/search', async (req, res) => {
 
 // --- SAFEPAY INTEGRATION ---
 app.post('/api/safepay/checkout', async (req, res) => {
-  const { plan, baseUrl: clientBaseUrl } = req.body;
+  const { plan, baseUrl: clientBaseUrl, userId } = req.body;
   let amount = 0;
   
   if (plan === 'pro') amount = 1000.00;
@@ -450,7 +489,9 @@ app.post('/api/safepay/checkout', async (req, res) => {
   else return res.status(400).json({ error: 'Invalid plan selected for checkout' });
 
   // Read environment variable or use a placeholder if not provided yet
+  const safepayEnv = process.env.SAFEPAY_ENV === 'sandbox' ? 'sandbox' : 'production';
   const safepayClientKey = process.env.SAFEPAY_CLIENT_KEY || 'sec_sandbox_dummy_key';
+  const apiHostname = safepayEnv === 'sandbox' ? 'sandbox.api.getsafepay.com' : 'api.getsafepay.com';
 
   try {
     const https = require('https');
@@ -459,11 +500,11 @@ app.post('/api/safepay/checkout', async (req, res) => {
       client: safepayClientKey,
       amount: amount * 100, // Convert to Paisa
       currency: 'PKR',
-      environment: 'sandbox'
+      environment: safepayEnv
     });
 
     const options = {
-      hostname: 'sandbox.api.getsafepay.com',
+      hostname: apiHostname,
       port: 443,
       path: '/order/v1/init',
       method: 'POST',
@@ -497,17 +538,55 @@ app.post('/api/safepay/checkout', async (req, res) => {
     }
 
     const tracker = data.data.token;
-    const orderId = `voxai_${Date.now()}`;
+    // Embed the userId and plan into the orderId for the webhook
+    const orderId = `voxai_${userId || 'anon'}_${plan}_${Date.now()}`;
     const baseUrl = clientBaseUrl || `${req.protocol}://${req.get('host')}`;
     const redirectUrl = encodeURIComponent(`${baseUrl}/success?plan=${plan}`);
     const cancelUrl = encodeURIComponent(`${baseUrl}/cancel`);
-    const checkoutUrl = `https://sandbox.api.getsafepay.com/checkout/pay?env=sandbox&beacon=${tracker}&source=custom&order_id=${orderId}&redirect_url=${redirectUrl}&cancel_url=${cancelUrl}`;
+    const checkoutUrl = `https://${apiHostname}/checkout/pay?env=${safepayEnv}&beacon=${tracker}&source=custom&order_id=${orderId}&redirect_url=${redirectUrl}&cancel_url=${cancelUrl}`;
     
     return res.status(200).json({ checkoutUrl });
   } catch (error) {
     console.error('Safepay integration error:', error);
     return res.status(500).json({ error: 'An error occurred connecting to Safepay.' });
   }
+});
+
+// --- SAFEPAY WEBHOOK HANDLER ---
+app.post('/api/safepay/webhook', async (req, res) => {
+  const webhookData = req.body;
+  console.log('Received Safepay Webhook:', webhookData);
+  
+  const orderId = webhookData.order_id || (webhookData.data && webhookData.data.order_id) || webhookData.reference;
+
+  if (!orderId) {
+    return res.status(400).send('Missing order_id');
+  }
+
+  const parts = orderId.split('_');
+  if (parts.length >= 3 && parts[0] === 'voxai') {
+    const userId = parts[1];
+    const plan = parts[2];
+    
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY && userId !== 'anon') {
+      const adminSupabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const { error } = await adminSupabase.from('user_profiles').upsert({
+        id: userId,
+        plan: plan
+      }, { onConflict: 'id' });
+      
+      if (error) {
+        console.error('Webhook: Failed to update user profile via service key', error);
+      } else {
+        console.log(`Webhook: Successfully upgraded user ${userId} to ${plan}`);
+      }
+    } else {
+      console.warn('Webhook: Cannot upgrade user because SUPABASE_SERVICE_ROLE_KEY is missing or userId is anon.');
+    }
+  }
+
+  // Always return 200 OK to acknowledge receipt to Safepay
+  res.status(200).send('OK');
 });
 // --- SAFEPAY REDIRECT HANDLERS ---
 app.all('/success', (req, res) => {

@@ -514,7 +514,7 @@
       <button class="btn btn-primary" onclick="handleAuth('signup')">Sign Up</button>
     </div>
     <div class="auth-buttons" id="userButtons" style="display: none;">
-      <button class="btn btn-outline" onclick="switchTab('account')">Edit Profile</button>
+      <button class="btn btn-outline" onclick="openEditProfile()">Edit Profile</button>
       <button class="btn btn-primary" onclick="logout()">Logout</button>
     </div>
   </nav>
@@ -568,6 +568,29 @@
         <div style="text-align:center; margin-top: 15px;">
           <a href="#" id="authToggle" style="color:#3b82f6; text-decoration:none;">Need an account? Sign Up</a>
         </div>
+      </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div id="editProfileModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="document.getElementById('editProfileModal').style.display='none'">&times;</span>
+        <div class="modal-header">Edit Profile</div>
+        <form id="editProfileForm">
+          <label>Full Name</label>
+          <input type="text" id="editName" placeholder="Full Name" required>
+          <label>Gender</label>
+          <select id="editGender" style="width:100%; padding:10px; margin:10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:white;">
+            <option value="">Select Gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+          <label>Date of Birth</label>
+          <input type="date" id="editDob" style="width:100%; padding:10px; margin: 10px 0; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:white;">
+          
+          <button type="submit" id="editProfileSubmitBtn" class="btn btn-primary" style="width:100%; margin-top: 10px; padding: 10px;">Save Changes</button>
+        </form>
       </div>
     </div>
 
@@ -809,6 +832,7 @@
           <strong>Email:</strong> ${currentUser.email}<br>
           <strong>Plan:</strong> <span style="text-transform:capitalize; color:#3b82f6; font-weight:bold;">${data.profile.plan}</span><br>
         `;
+        window.currentProfileData = data.profile;
 
         const formatMins = (secs) => (secs/60).toFixed(1);
         const setProgress = (id, usage, limit) => {
@@ -861,6 +885,12 @@
         handleAuth('signup');
         window.history.replaceState({}, document.title, "/");
       }
+      if (urlParams.get('payment_success') === 'true') {
+        handleAuth('signin');
+        document.getElementById('paymentSuccessMessage').innerHTML = 'Payment successful!<br>Please log in (ensure you have confirmed your email first).';
+        document.getElementById('paymentSuccessMessage').style.display = 'block';
+        window.history.replaceState({}, document.title, "/");
+      }
     });
 
     document.getElementById('authForm').addEventListener('submit', async (e) => {
@@ -874,6 +904,7 @@
         payload.gender = document.getElementById('authGender').value;
         payload.dob = document.getElementById('authDob').value;
         payload.plan = document.getElementById('authPlan').value;
+        localStorage.setItem('pendingProfile', JSON.stringify(payload));
       }
 
       payload.baseUrl = window.location.origin;
@@ -901,7 +932,7 @@
               const res = await fetch('/api/safepay/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ plan: payload.plan, baseUrl: window.location.origin })
+                body: JSON.stringify({ plan: payload.plan, baseUrl: window.location.origin, userId: data.user.id })
               });
               const checkoutData = await res.json();
               if (res.ok && checkoutData.checkoutUrl) {
@@ -929,6 +960,30 @@
         document.getElementById('authModal').style.display = 'none';
         currentUser = data.user;
 
+        const pendingProfile = localStorage.getItem('pendingProfile');
+        if (pendingProfile && data.session) {
+          try {
+            const profileData = JSON.parse(pendingProfile);
+            await fetch('/api/profile/update', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${data.session.access_token}`
+              },
+              body: JSON.stringify({
+                id: data.user.id,
+                fullName: profileData.fullName,
+                gender: profileData.gender,
+                dob: profileData.dob,
+                plan: profileData.plan
+              })
+            });
+            localStorage.removeItem('pendingProfile');
+          } catch (e) {
+            console.error('Failed to update profile from pending data:', e);
+          }
+        }
+
         // Update UI state
         document.getElementById('welcomeMsg').innerText = `Welcome, ${email}`;
         
@@ -947,6 +1002,60 @@
         switchTab('transcribe');
       } catch (err) {
         alert(err.message);
+        submitBtn.innerText = origText;
+        submitBtn.disabled = false;
+      }
+    });
+
+    function openEditProfile() {
+      if (!currentUser) return;
+      document.getElementById('editName').value = window.currentProfileData?.full_name || '';
+      document.getElementById('editGender').value = window.currentProfileData?.gender || '';
+      document.getElementById('editDob').value = window.currentProfileData?.dob || '';
+      document.getElementById('editProfileModal').style.display = 'block';
+    }
+
+    document.getElementById('editProfileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById('editProfileSubmitBtn');
+      const origText = submitBtn.innerText;
+      submitBtn.innerText = 'Saving...';
+      submitBtn.disabled = true;
+
+      try {
+        const storedUser = JSON.parse(localStorage.getItem('voxai_user') || sessionStorage.getItem('voxai_user'));
+        const token = storedUser?.session?.access_token;
+        if (!token) throw new Error('Not authenticated');
+
+        const payload = {
+          id: currentUser.id,
+          fullName: document.getElementById('editName').value,
+          gender: document.getElementById('editGender').value,
+          dob: document.getElementById('editDob').value,
+          plan: window.currentProfileData?.plan || 'basic'
+        };
+
+        const response = await fetch('/api/profile/update', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to update profile');
+
+        alert('Profile updated successfully!');
+        document.getElementById('editProfileModal').style.display = 'none';
+        
+        if (document.getElementById('tab-account').classList.contains('active')) {
+          loadProfile();
+        }
+      } catch (err) {
+        alert(err.message);
+      } finally {
         submitBtn.innerText = origText;
         submitBtn.disabled = false;
       }
