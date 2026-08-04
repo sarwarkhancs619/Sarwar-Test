@@ -746,6 +746,7 @@
 
   <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Safepay JS SDK -->
   <script src="https://storage.googleapis.com/safepayobjects/api/safepay-checkout.min.js"></script>
   <script>
@@ -1139,9 +1140,24 @@
       const form = e.target;
       const formData = new FormData(form);
       
+      const fileToUpload = recordedAudioBlob || fileInput.files[0];
+      
       // If we have a recorded blob, add it to formData, overriding the file input
       if (recordedAudioBlob) {
         formData.set('audio', recordedAudioBlob, 'recorded_audio.webm');
+      }
+
+      // Check duration before doing anything
+      let durationSeconds = 60;
+      try {
+        const getAudioDuration = (f) => new Promise(resolve => {
+          const audio = new Audio();
+          audio.onloadedmetadata = () => resolve(audio.duration);
+          audio.src = URL.createObjectURL(f);
+        });
+        durationSeconds = await getAudioDuration(fileToUpload);
+      } catch (e) {
+        console.warn('Could not determine audio duration client-side');
       }
 
       if (currentUser) {
@@ -1161,7 +1177,19 @@
           const pRes = await fetch(`/api/profile?userId=${currentUser.id}`);
           if (pRes.ok) {
             const pData = await pRes.json();
-            if (pData.usage.daily >= pData.limits.daily) {
+            
+            // Check free plan limits (5 mins = 300s)
+            if (pData.profile.plan === 'basic' || pData.profile.plan === 'free') {
+              if (durationSeconds > 300) {
+                alert(`Your audio is ${Math.ceil(durationSeconds/60)} minutes long. Free plan only allows 5 minutes per file. Please upgrade to upload larger files.`);
+                loadingMsg.style.display = 'none';
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                return;
+              }
+            }
+
+            if (pData.usage.daily + durationSeconds > pData.limits.daily) {
               alert(`Daily quota exceeded for ${pData.profile.plan} plan.`);
               loadingMsg.style.display = 'none';
               submitBtn.disabled = false;
@@ -1173,10 +1201,44 @@
       }
 
       try {
-        const response = await fetch('/api/transcribe', {
-          method: 'POST',
-          body: formData
-        });
+        let supabasePath = null;
+        if (supabaseClient) {
+          loadingMsg.innerHTML = '<em>Uploading to Supabase Storage...</em>';
+          const fileName = `${Date.now()}_${currentUser ? currentUser.id : 'anon'}.webm`;
+          const { data, error } = await supabaseClient.storage
+            .from('audio-uploads')
+            .upload(fileName, fileToUpload);
+          if (error) {
+             console.error('Supabase upload error:', error);
+             throw new Error('Failed to upload large file to storage. Ensure bucket exists.');
+          }
+          supabasePath = data.path;
+        }
+
+        loadingMsg.innerHTML = '<em>Analyzing audio with Gemini... Please wait...</em>';
+        
+        const payload = {
+          targetLang: formData.get('targetLang'),
+          mode: formData.get('mode'),
+          duration: durationSeconds
+        };
+        if (currentUser) payload.userId = currentUser.id;
+        
+        let response;
+        if (supabasePath) {
+          payload.supabasePath = supabasePath;
+          response = await fetch('/api/transcribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          // Fallback to normal upload
+          response = await fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData
+          });
+        }
 
         if (!response.ok) {
           const errText = await response.text();
@@ -1364,8 +1426,20 @@
       }
     });
 
+    let supabaseClient = null;
+
     // Fetch and display products and restore session
     document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const configRes = await fetch('/api/config');
+        const config = await configRes.json();
+        if (config.supabaseUrl && config.supabaseAnonKey) {
+          supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+        }
+      } catch (e) {
+        console.error('Failed to init Supabase client:', e);
+      }
+
       // Restore user session if it exists
       const storedUser = localStorage.getItem('voxai_user') || sessionStorage.getItem('voxai_user');
       if (storedUser) {

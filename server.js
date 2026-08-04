@@ -74,6 +74,13 @@ const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 const anonymousUsage = {}; // IP -> daily usage in seconds
 
 // GET all products from Supabase
+app.get('/api/config', (req, res) => {
+  res.json({
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY
+  });
+});
+
 app.get('/api/products', async (req, res) => {
   try {
     if (cachedProducts && Date.now() - productsCacheTime < CACHE_TTL) {
@@ -133,24 +140,42 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     return res.status(500).send('GEMINI_API_KEY not configured.');
   }
   try {
-    // Check if a file was uploaded
-    if (!req.file) {
-      return res.status(400).send('No audio file was uploaded.');
+    let filePath;
+    let mimeType;
+    let isSupabaseFile = false;
+    let targetLang = req.body.targetLang || 'English';
+    let userId = req.body.userId;
+    let mode = req.body.mode || 'both';
+    let durationSeconds = req.body.duration ? parseInt(req.body.duration, 10) : 60; // default 60
+    let supabasePath = req.body.supabasePath;
+
+    if (req.file) {
+      filePath = req.file.path;
+      mimeType = req.file.mimetype;
+    } else if (supabasePath) {
+      isSupabaseFile = true;
+      // Download the file from Supabase Storage
+      const { data, error } = await supabase.storage.from('audio-uploads').download(supabasePath);
+      if (error) {
+         return res.status(500).send('Failed to download from Supabase Storage.');
+      }
+      const buffer = Buffer.from(await data.arrayBuffer());
+      filePath = path.join(os.tmpdir(), `supa_${Date.now()}.webm`);
+      fs.writeFileSync(filePath, buffer);
+      mimeType = data.type || 'audio/webm';
+    } else {
+      return res.status(400).send('No audio file was provided.');
     }
 
-    const filePath = req.file.path;
-    const targetLang = req.body.targetLang || 'English';
-    const userId = req.body.userId;
-    const mode = req.body.mode || 'both';
-
-    let durationSeconds = 60; // fallback
-    try {
-      const metadata = await mm.parseFile(filePath);
-      if (metadata.format.duration) {
-        durationSeconds = Math.ceil(metadata.format.duration);
+    if (!isSupabaseFile) {
+      try {
+        const metadata = await mm.parseFile(filePath);
+        if (metadata.format.duration) {
+          durationSeconds = Math.ceil(metadata.format.duration);
+        }
+      } catch (e) {
+        console.warn('Could not parse audio duration:', e);
       }
-    } catch (e) {
-      console.warn('Could not parse audio duration:', e);
     }
 
     const isAnonymous = !userId;
@@ -216,7 +241,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     const uploadResult = await ai.files.upload({
       file: filePath,
       config: {
-        mimeType: req.file.mimetype,
+        mimeType: mimeType,
       },
     });
 
@@ -254,7 +279,12 @@ Example format:
     });
 
     // Clean up: Delete the local file since Gemini has it now
-    fs.unlinkSync(filePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    if (isSupabaseFile) {
+      await supabase.storage.from('audio-uploads').remove([supabasePath]);
+    }
 
     // Log usage
     if (isAnonymous) {
